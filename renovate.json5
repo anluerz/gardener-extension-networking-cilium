@@ -29,15 +29,29 @@
       "automerge": false
     },
     {
-      // cilium-envoy tags are `v<envoy-semver>-<build-timestamp>-<cilium/proxy-sha>`,
-      // which default docker versioning cannot compare, so no upgrade is ever proposed.
-      // Parse the semver out with regex versioning, and pin the Envoy MINOR to 1.36.x
-      // so only same-minor patch bumps are automatic. Advance the `1.36` gate manually
-      // when cilium itself moves to the next minor (kept in lockstep with the Cilium version).
+      // cilium-envoy and certgen are synced from the authoritative upstream
+      // cilium/cilium values.yaml via postUpgradeTasks on the cilium-agent bump.
+      // Disable independent docker tracking to prevent version drift or over-bumping.
       "matchDatasources": ["docker"],
-      "matchPackageNames": ["quay.io/cilium/cilium-envoy"],
-      "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)-[0-9a-f]+$",
-      "allowedVersions": "/^v1\\.36\\./"
+      "matchPackageNames": [
+        "quay.io/cilium/cilium-envoy",
+        "quay.io/cilium/certgen"
+      ],
+      "enabled": false
+    },
+    {
+      // When cilium-agent bumps, sync cilium-envoy and certgen to the exact versions
+      // pinned by that Cilium release in its upstream values.yaml.
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/cilium/cilium"],
+      "prBodyNotes": [
+        "⚠️ `cilium-envoy` and `certgen` are automatically synced from the upstream `cilium/cilium` values.yaml — check `imagevector/images.yaml` in the diff for their new versions."
+      ],
+      "postUpgradeTasks": {
+        "commands": ["bash ./scripts/sync-cilium-sidecar-images.sh {{newVersion}}"],
+        "fileFilters": ["imagevector/images.yaml"],
+        "executionMode": "update"
+      }
     },
     {
       // Group golang updates in one PR.
