@@ -4,7 +4,7 @@
 # Fetches the authoritative cilium/cilium values.yaml at the given Cilium version and
 # updates imagevector/images.yaml with the exact cilium-envoy and certgen tags it pins.
 # Intended to be called from Renovate postUpgradeTasks after a cilium-agent bump.
-# Requires: curl, yq (mikefarah/yq v4+), python3
+# Requires: curl, python3 (stdlib only)
 set -euo pipefail
 
 CILIUM_VERSION="${1:?Usage: $0 <cilium-version>}"
@@ -14,8 +14,42 @@ TARGET="imagevector/images.yaml"
 echo "Fetching ${VALUES_URL}..."
 VALUES=$(curl -fsSL "$VALUES_URL")
 
-ENVOY_TAG=$(printf '%s' "$VALUES"   | yq '.envoy.image.tag')
-CERTGEN_TAG=$(printf '%s' "$VALUES" | yq '.certgen.image.tag')
+# Extract image tags using python3 -c (code via -c arg; stdin carries the YAML data).
+# No external tools (yq/jq/etc.) needed — only python3 stdlib.
+ENVOY_TAG=$(printf '%s' "$VALUES" | python3 -c "
+import sys
+lines = sys.stdin.read().splitlines()
+in_top = in_image = False
+for line in lines:
+    if line == 'envoy:':
+        in_top = True; in_image = False
+    elif in_top and line == '  image:':
+        in_image = True
+    elif in_top and in_image and line.startswith('    tag:'):
+        val = line.split('tag:', 1)[1].strip().strip(chr(34)).strip(chr(39))
+        print(val)
+        break
+    elif in_top and line and not line[0].isspace():
+        in_top = in_image = False
+")
+
+CERTGEN_TAG=$(printf '%s' "$VALUES" | python3 -c "
+import sys
+lines = sys.stdin.read().splitlines()
+in_top = in_image = False
+for line in lines:
+    if line == 'certgen:':
+        in_top = True; in_image = False
+    elif in_top and line == '  image:':
+        in_image = True
+    elif in_top and in_image and line.startswith('    tag:'):
+        val = line.split('tag:', 1)[1].strip().strip(chr(34)).strip(chr(39))
+        print(val)
+        break
+    elif in_top and line and not line[0].isspace():
+        in_top = in_image = False
+")
+
 ENVOY_VER=$(printf '%s' "$ENVOY_TAG" | grep -oE '^v[0-9]+\.[0-9]+\.[0-9]+')
 
 echo "cilium-envoy: ${ENVOY_TAG}"
