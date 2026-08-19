@@ -29,6 +29,17 @@
       "automerge": false
     },
     {
+      // cilium-envoy tags are `v<envoy-semver>-<build-timestamp>-<cilium/proxy-sha>`,
+      // which default docker versioning cannot compare, so no upgrade is ever proposed.
+      // Parse the semver out with regex versioning, and pin the Envoy MINOR to 1.36.x
+      // so only same-minor patch bumps are automatic. Advance the `1.36` gate manually
+      // when cilium itself moves to the next minor (kept in lockstep with the Cilium version).
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["quay.io/cilium/cilium-envoy"],
+      "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)-[0-9a-f]+$",
+      "allowedVersions": "/^v1\\.36\\./"
+    },
+    {
       // Group golang updates in one PR.
       "groupName": "golang",
       "matchDatasources": ["docker", "go-version"],
