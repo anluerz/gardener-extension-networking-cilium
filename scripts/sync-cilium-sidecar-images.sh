@@ -61,7 +61,7 @@ echo "envoy ver:    ${ENVOY_VER}"
 UPDATE_PY=$(cat <<'PYEOF'
 import sys, re
 
-target, envoy_tag, certgen_tag, envoy_ver_v = sys.argv[1:]
+target, envoy_tag, certgen_tag, envoy_ver_v, cilium_ver = sys.argv[1:]
 envoy_ver = envoy_ver_v.lstrip('v')  # e.g. "1.36.9"
 
 with open(target) as f:
@@ -93,6 +93,14 @@ content = re.sub(
     content,
 )
 
+# 4. Update or insert a sync-info comment before the cilium-envoy entry so the
+#    PR diff makes the version changes immediately visible without reading the diff.
+sync_comment = f'  # Synced from cilium/cilium {cilium_ver}: cilium-envoy={envoy_tag}, certgen={certgen_tag}\n'
+if '  # Synced from cilium/cilium' in content:
+    content = re.sub(r'  # Synced from cilium/cilium[^\n]*\n', sync_comment, content)
+else:
+    content = content.replace('  - name: cilium-envoy\n', sync_comment + '  - name: cilium-envoy\n', 1)
+
 with open(target, 'w') as f:
     f.write(content)
 
@@ -100,13 +108,4 @@ print(f"Updated {target}: cilium-envoy={envoy_tag}, certgen={certgen_tag}")
 PYEOF
 )
 
-python3 -c "$UPDATE_PY" "$TARGET" "$ENVOY_TAG" "$CERTGEN_TAG" "$ENVOY_VER"
-
-# Post a comment on the open PR listing the new sidecar versions (best-effort, no-fail)
-PR_NUMBER=$(gh pr list --head "$(git branch --show-current)" --json number \
-  --jq '.[0].number' 2>/dev/null || true)
-if [[ -n "$PR_NUMBER" ]]; then
-  gh pr comment "$PR_NUMBER" --body "**Sidecar sync from cilium/cilium ${CILIUM_VERSION}**
-- \`cilium-envoy\`: \`${ENVOY_TAG}\`
-- \`certgen\`: \`${CERTGEN_TAG}\`" 2>/dev/null || true
-fi
+python3 -c "$UPDATE_PY" "$TARGET" "$ENVOY_TAG" "$CERTGEN_TAG" "$ENVOY_VER" "$CILIUM_VERSION"
